@@ -21,3 +21,14 @@
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# Large video files (exceed GitHub's 100MB limit)
+public/videos/VHS/ACID LOVE INTRO VHS.mp4
+public/videos/VHS/ALL THE TIME INTRO VHS.mp4
+src/Videos/VHS/ACID LOVE INTRO VHS.mp4
+src/Videos/VHS/ALL THE TIME INTRO VHS.mp4
+
+# Large audio files (over 50MB - recommended limit)
+src/Tracks/WINDOWS DOWN master 6.wav
+src/Tracks/YANKEE GO HOME master.wav
+src/Tracks/proj 993 w into.wav
