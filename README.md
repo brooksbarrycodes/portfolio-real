@@ -1,5 +1,6 @@
 # portfolio
 ## how to run
-npm run dev
+- `npm start` (Create React App)
+- or `npm run dev` (alias)
 ## about
 this is Brooks Barry's music/creative portfolio
