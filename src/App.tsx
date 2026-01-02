@@ -1,9 +1,14 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import './App.css';
 import CurtainEffect from './CurtainEffect';
+import ColorBends from './components/ColorBends';
+import Particles from './components/Particles';
+import FuzzyText from './components/FuzzyText';
+import TextType from './components/TextType';
 
 function App() {
+  const PERF_MODE = true; // temporarily reduce lag by disabling mouse-driven effects
   const [selectedTrack, setSelectedTrack] = useState<any>(null);
   const [currentEyeIndex, setCurrentEyeIndex] = useState(0);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
@@ -15,6 +20,11 @@ function App() {
   const [isTrack3Playing, setIsTrack3Playing] = useState(false);
   const [isTrack4Playing, setIsTrack4Playing] = useState(false);
   const [isTrack5Playing, setIsTrack5Playing] = useState(false);
+  const [projectorOverlaySide, setProjectorOverlaySide] = useState<'left' | 'right' | null>(null);
+  const [showProjectorYouTube, setShowProjectorYouTube] = useState(false);
+  const [projectorYouTubeVideo, setProjectorYouTubeVideo] = useState('dQw4w9WgXcQ'); // YouTube video ID for alpha-left (change this to your desired video ID)
+  const [showProjectorYouTubeRight, setShowProjectorYouTubeRight] = useState(false);
+  const [projectorYouTubeVideoRight, setProjectorYouTubeVideoRight] = useState('otCpCn0l4Wo'); // YouTube video ID for alpha-right
   const [isTrack6Playing, setIsTrack6Playing] = useState(false);
   const [isDrumLooperPlaying, setIsDrumLooperPlaying] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
@@ -52,13 +62,164 @@ function App() {
   const [debugPoint1, setDebugPoint1] = useState({ x: 101, y: 1636 });
   const [debugPoint2, setDebugPoint2] = useState({ x: 56, y: 4612 });
   const [isDragging, setIsDragging] = useState<'point1' | 'point2' | null>(null);
-  const eyesSectionRef = useRef<HTMLElement>(null);
   const lastMousePos = useRef({ x: 0, y: 0 });
   const drumSequenceRef = useRef<any>(null);
   const drumSoundsRef = useRef<any>(null);
   const vhsVideoRef = useRef<HTMLVideoElement>(null);
   const curtainAnimationRef = useRef<NodeJS.Timeout | null>(null);
   const scoresAnimationRef = useRef<NodeJS.Timeout | null>(null);
+  const [isAboutExpanded, setIsAboutExpanded] = useState(false);
+  
+  // Audio refs for disc players
+  const discAudioRefs = useRef<(HTMLAudioElement | null)[]>([]);
+  const [playingDiscIndex, setPlayingDiscIndex] = useState<number | null>(null);
+  // Title overlay switching
+  const [titleIndex, setTitleIndex] = useState<0 | 1>(0);
+  useEffect(() => {
+    const id = setInterval(() => setTitleIndex((prev) => (prev === 0 ? 1 : 0)), 2000);
+    return () => clearInterval(id);
+  }, []);
+
+  const [activeDiscTextIndex, setActiveDiscTextIndex] = useState<number | null>(null);
+  const [hasClickedDiscText, setHasClickedDiscText] = useState<boolean[]>(() => new Array(6).fill(false));
+
+  const scrollToSection = (selector: string) => {
+    const el = document.querySelector(selector);
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  const scrollToTopVhsWithButtons = () => {
+    const buttonsEl = document.querySelector('#videos-section .vhs-images-container');
+    if (!buttonsEl) {
+      scrollToSection('#videos-section');
+      return;
+    }
+    const rect = buttonsEl.getBoundingClientRect();
+    // Position the VHS buttons so they sit at the very bottom of the viewport (with a tiny padding).
+    const padding = -12;
+    const y = window.scrollY + rect.bottom - window.innerHeight + padding;
+    window.scrollTo({ top: Math.max(0, y), behavior: 'smooth' });
+  };
+
+  const scrollToCdSectionBottom = () => {
+    const el = document.querySelector('.disc-grid-section');
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const padding = 0;
+    const y = window.scrollY + rect.bottom - window.innerHeight + padding;
+    window.scrollTo({ top: Math.max(0, y), behavior: 'smooth' });
+  };
+
+  const scrollToContactSectionBottom = () => {
+    const el = document.querySelector('.contact-section');
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const padding = 0;
+    const y = window.scrollY + rect.bottom - window.innerHeight + padding;
+    window.scrollTo({ top: Math.max(0, y), behavior: 'smooth' });
+  };
+
+  const discTypedTexts = useMemo(
+    () => [
+      `YANKEE GO HOME\n\nLorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.\n\nUt enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.\n\nSed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam.\n\nNeque porro quisquam est, qui dolorem ipsum quia dolor sit amet, consectetur, adipisci velit.`,
+      `PROJ 993\n\nLorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.\n\nUt enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.\n\nDuis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.\n\nExcepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.`,
+      `HOW IT GOT SO TOUGH\n\nLorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.\n\nSed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium.\n\nTotam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt explicabo.`,
+      `THE PLAN\n\nLorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.\n\nUt enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.\n\nNemo enim ipsam voluptatem quia voluptas sit aspernatur aut odit aut fugit.`,
+      `WINDOWS DOWN\n\nLorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.\n\nDuis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.\n\nAt vero eos et accusamus et iusto odio dignissimos ducimus.`,
+      `PLACEHOLDER\n\nLorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.\n\nSimilique sunt in culpa qui officia deserunt mollitia animi, id est laborum et dolorum fuga.\n\nEt harum quidem rerum facilis est et expedita distinctio.`,
+    ],
+    []
+  );
+
+  // CD section gap line (temporary): centered between section left edge and left-most CD image edge
+  const discGridSectionRef = useRef<HTMLElement | null>(null);
+  const [cdGapLineLeftPx, setCdGapLineLeftPx] = useState<number | null>(null);
+
+  useEffect(() => {
+    const section = discGridSectionRef.current;
+    if (!section) return;
+
+    const update = () => {
+      const imgs = Array.from(section.querySelectorAll<HTMLImageElement>('.disc-image'));
+      if (imgs.length == 0) return;
+
+      const sectionLeft = section.getBoundingClientRect().left;
+      const minDiscLeft = imgs.reduce((min, img) => Math.min(min, img.getBoundingClientRect().left), Number.POSITIVE_INFINITY);
+      const relativeLeft = minDiscLeft - sectionLeft;
+      if (!Number.isFinite(relativeLeft) || relativeLeft <= 0) return;
+
+      setCdGapLineLeftPx(relativeLeft / 2);
+    };
+
+    const raf = requestAnimationFrame(update);
+    window.addEventListener('resize', update);
+    const ro = new ResizeObserver(() => update());
+    ro.observe(section);
+
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener('resize', update);
+      ro.disconnect();
+    };
+  }, []);
+  
+  // Handle disc click to play audio
+  const handleDiscClick = (trackIndex: number) => {
+    setActiveDiscTextIndex(trackIndex);
+    setHasClickedDiscText((prev) => {
+      if (prev[trackIndex]) return prev;
+      const next = [...prev];
+      next[trackIndex] = true;
+      return next;
+    });
+    // Stop all other tracks
+    discAudioRefs.current.forEach((audio, index) => {
+      if (audio && index !== trackIndex) {
+        audio.pause();
+        audio.currentTime = 0;
+      }
+    });
+    
+    // Play or pause the clicked track
+    const audio = discAudioRefs.current[trackIndex];
+    if (audio) {
+      if (audio.paused) {
+        audio.play();
+        setPlayingDiscIndex(trackIndex);
+      } else {
+        audio.pause();
+        setPlayingDiscIndex(null);
+      }
+    }
+  };
+  
+  // Set up audio event listeners
+  useEffect(() => {
+    const cleanupFunctions: (() => void)[] = [];
+    
+    discAudioRefs.current.forEach((audio, index) => {
+      if (audio) {
+        const handlePlay = () => setPlayingDiscIndex(index);
+        const handlePause = () => setPlayingDiscIndex(null);
+        const handleEnded = () => setPlayingDiscIndex(null);
+        
+        audio.addEventListener('play', handlePlay);
+        audio.addEventListener('pause', handlePause);
+        audio.addEventListener('ended', handleEnded);
+        
+        cleanupFunctions.push(() => {
+          audio.removeEventListener('play', handlePlay);
+          audio.removeEventListener('pause', handlePause);
+          audio.removeEventListener('ended', handleEnded);
+        });
+      }
+    });
+    
+    return () => {
+      cleanupFunctions.forEach(cleanup => cleanup());
+    };
+  }, []);
   
   // Scores animation function
   const startScoresAnimation = () => {
@@ -279,41 +440,43 @@ function App() {
 
   // Eye tracking based purely on page coordinates - no viewport dependency
   useEffect(() => {
-    let eyeCenterPageX = 0;
-    let eyeCenterPageY = 0;
+    let eyeCenters: Array<{ x: number; y: number }> = [];
     
     // Calculate eye position once on load/resize
-    const calculateEyePosition = () => {
-      if (!eyesSectionRef.current) return;
-      
-      const eyeImage = eyesSectionRef.current.querySelector('.eye-image') as HTMLImageElement;
-      if (!eyeImage) return;
-      
-      // Get eye position using offsetTop/offsetLeft (page coordinates, not viewport)
-      let element = eyeImage as HTMLElement;
-      let offsetX = 0;
-      let offsetY = 0;
-      
-      // Calculate absolute position by walking up the DOM tree
-      while (element) {
-        offsetX += element.offsetLeft;
-        offsetY += element.offsetTop;
-        element = element.offsetParent as HTMLElement;
-      }
-      
-      // Calculate eye center in absolute page coordinates
-      eyeCenterPageX = offsetX + eyeImage.offsetWidth / 2;
-      eyeCenterPageY = offsetY + eyeImage.offsetHeight / 2;
+    const calculateEyePositions = () => {
+      const imgs = Array.from(document.querySelectorAll<HTMLImageElement>('.eyes-section .eye-image'));
+      eyeCenters = imgs.map((img) => {
+        const rect = img.getBoundingClientRect();
+        return {
+          x: rect.left + window.scrollX + rect.width / 2,
+          y: rect.top + window.scrollY + rect.height / 2,
+        };
+      });
     };
     
     // Calculate initial position
-    calculateEyePosition();
+    calculateEyePositions();
     
     // Recalculate on window resize
-    window.addEventListener('resize', calculateEyePosition);
+    window.addEventListener('resize', calculateEyePositions);
     
     // Shared function to calculate eye direction based on mouse position
     const calculateEyeDirection = (mousePageX: number, mousePageY: number) => {
+      if (eyeCenters.length === 0) return;
+      // Pick the closest eye on the page to the mouse position (supports multiple eyes sections).
+      let eyeCenterPageX = eyeCenters[0].x;
+      let eyeCenterPageY = eyeCenters[0].y;
+      let bestDist = Number.POSITIVE_INFINITY;
+      for (const c of eyeCenters) {
+        const dx = mousePageX - c.x;
+        const dy = mousePageY - c.y;
+        const d2 = dx * dx + dy * dy;
+        if (d2 < bestDist) {
+          bestDist = d2;
+          eyeCenterPageX = c.x;
+          eyeCenterPageY = c.y;
+        }
+      }
       // Calculate distance from mouse to eye center in pure page coordinates
       const deltaX = mousePageX - eyeCenterPageX;
       const deltaY = mousePageY - eyeCenterPageY;
@@ -402,8 +565,8 @@ function App() {
     };
 
     const handleScroll = () => {
-      // Recalculate eye position when scrolling (in case layout changes)
-      calculateEyePosition();
+      // Recalculate eye positions when scrolling (in case layout changes)
+      calculateEyePositions();
       
       // Force update with current mouse position during scroll
       // Use requestAnimationFrame to ensure DOM has updated
@@ -420,7 +583,7 @@ function App() {
     return () => {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('scroll', handleScroll);
-      window.removeEventListener('resize', calculateEyePosition);
+      window.removeEventListener('resize', calculateEyePositions);
     };
   }, []);
 
@@ -953,104 +1116,992 @@ function App() {
 
   return (
     <div className="portfolio">
-      {/* Portrait Image Section - Top of Page */}
+        {/* Portrait Image Section - Top of Page (Background layer) */}
       <section className="portrait-section">
         <img
           src={require('./Photos/DSC_1009 2.jpg')}
           alt="Portrait"
           className="portrait-image"
         />
+        {/* Disclaimer - overlayed on portrait */}
+        <div className="disclaimer">
+          All contents of this website were photographed, recorded, stylized, edited, coded, structured, and produced by Brooks Barry, unless otherwise stated
+        </div>
       </section>
       
-      {/* Guitar Post It at Top */}
-      <div className="guitar-post-it-top">
-        <img
-          src={require('./amuse stores logos/guitar post it.png')}
-          alt="Guitar Post It"
-          className="guitar-post-it-top-img"
+      {/* Content wrapper - scrolls over portrait but stays in place */}
+      <div className="content-overlay">
+      
+      {/* Roles Text Section - Invisible section that scrolls over photo */}
+      <section className="roles-section">
+        <div className="roles-text">
+          <button
+            type="button"
+            className="role-item"
+            onClick={() => {
+              setIsAboutExpanded(true);
+              // Wait a tick so the expanded content affects layout before scrolling.
+              requestAnimationFrame(() => scrollToSection('#about-me-section'));
+            }}
+          >
+            Artist
+          </button>
+          <button type="button" className="role-item" onClick={scrollToCdSectionBottom}>
+            Producer
+          </button>
+          <button type="button" className="role-item" onClick={scrollToTopVhsWithButtons}>
+            Performer
+          </button>
+          <button type="button" className="role-item" onClick={() => scrollToSection('.projector-section')}>
+            Video Producer
+          </button>
+          <button type="button" className="role-item" onClick={() => scrollToSection('.scoring-section')}>
+            Content Creator
+          </button>
+          <button type="button" className="role-item" onClick={scrollToCdSectionBottom}>
+            Mixing Engineer
+          </button>
+          <button type="button" className="role-item" onClick={scrollToCdSectionBottom}>
+            Vocalist/Lyricist
+          </button>
+          <button type="button" className="role-item" onClick={() => scrollToSection('.scoring-section')}>
+            Graphic Designer
+          </button>
+          <div className="roles-divider" />
+          <button type="button" className="role-item" onClick={scrollToContactSectionBottom}>
+            Contact
+          </button>
+        </div>
+      </section>
+      
+      {/* New Section Above Hero */}
+      <section id="about-me-section" className="new-section-above-hero">
+        <div className="hero-about-bends-bg" aria-hidden="true">
+          <ColorBends
+                enableMouse={false}
+            colors={["#ff5c7a", "#8a5cff", "#00ffd1"]}
+            rotation={30}
+            speed={0.3}
+            scale={1.2}
+            frequency={1.4}
+            warpStrength={1.2}
+            mouseInfluence={0.8}
+            parallax={0.6}
+            noise={0.08}
+            transparent
+            className=""
+            style={{ width: '100%', height: '100%' }}
+          />
+        </div>
+        <div className="hero-about-bends-overlay" aria-hidden="true" />
+        <div className="container">
+          <h2 className="about-me-title">About Me</h2>
+          <div className={`about-me-content ${isAboutExpanded ? 'expanded' : ''}`}>
+            <p>
+              Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
+                </p>
+                <p>
+                  Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
+            </p>
+            <p>
+              Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt explicabo. Nemo enim ipsam voluptatem quia voluptas sit aspernatur aut odit aut fugit, sed quia consequuntur magni dolores eos qui ratione voluptatem sequi nesciunt.
+            </p>
+            <p>
+              Neque porro quisquam est, qui dolorem ipsum quia dolor sit amet, consectetur, adipisci velit, sed quia non numquam eius modi tempora incidunt ut labore et dolore magnam aliquam quaerat voluptatem. Ut enim ad minima veniam, quis nostrum exercitationem ullam corporis suscipit laboriosam, nisi ut aliquid ex ea commodi consequatur.
+            </p>
+            <p>
+              Quis autem vel eum iure reprehenderit qui in ea voluptate velit esse quam nihil molestiae consequatur, vel illum qui dolorem eum fugiat quo voluptas nulla pariatur. At vero eos et accusamus et iusto odio dignissimos ducimus qui blanditiis praesentium voluptatum deleniti atque corrupti quos dolores et quas molestias excepturi sint occaecati cupiditate non provident.
+            </p>
+            <p>
+              Similique sunt in culpa qui officia deserunt mollitia animi, id est laborum et dolorum fuga. Et harum quidem rerum facilis est et expedita distinctio. Nam libero tempore, cum soluta nobis est eligendi optio cumque nihil impedit quo minus id quod maxime placeat facere possimus, omnis voluptas assumenda est, omnis dolor repellendus.
+            </p>
+      </div>
+          <button 
+            className="read-more-btn"
+            onClick={() => setIsAboutExpanded(!isAboutExpanded)}
+          >
+            {isAboutExpanded ? 'Read Less' : 'Read More'}
+          </button>
+        </div>
+      </section>
+      
+      {/* Disc Grid Section */}
+      <section className="disc-grid-section" ref={discGridSectionRef}>
+        <div className="cd-particles-bg" aria-hidden="true">
+          <Particles
+                enableMouse={false}
+                maxFps={24}
+            count={90}
+            mouseRadius={180}
+            mouseForce={1.3}
+            linkDistance={150}
+            linkOpacity={0.35}
+            className=""
+            style={{ width: '100%', height: '100%' }}
+          />
+        </div>
+        <div className="cd-particles-overlay" aria-hidden="true" />
+        {cdGapLineLeftPx != null && activeDiscTextIndex != null && hasClickedDiscText[activeDiscTextIndex] && (
+          <>
+                        <div
+              className="cd-gap-textbox"
+              style={{
+                left: cdGapLineLeftPx,
+                width: Math.max(120, cdGapLineLeftPx * 2 - 48),
+              }}
+            >
+              <div className="cd-gap-textbox-inner">
+                {discTypedTexts.map((txt, idx) => {
+                  if (!hasClickedDiscText[idx]) return null;
+                  const isActive = idx === activeDiscTextIndex;
+                  return (
+                    <div
+                      key={idx}
+                      className={`cd-disc-text ${isActive ? 'cd-disc-text--active' : 'cd-disc-text--inactive'}`}
+                      aria-hidden={!isActive}
+                    >
+                      <TextType text={txt} cursor="|" speed={12} startDelay={0} cursorBlink hideCursorWhenDone={false} />
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </>
+        )}
+        <div className="disc-grid-container">
+          <div className="disc-grid">
+            {/* Top row: Tracks 1, 2, 3 */}
+            <div className="disc-wrapper" onClick={() => handleDiscClick(0)}>
+              <div className={`disc-container ${playingDiscIndex === 0 ? 'spinning' : ''}`}>
+                <img 
+                  src={require('./amuse stores logos/disc.png')} 
+                  alt="Disc" 
+                  className="disc-image"
+                />
+                <svg className="disc-text-svg" viewBox="0 0 300 300">
+                  <defs>
+                    <path id="disc-curve" d="M 50,150 A 100,100 0 1,1 250,150" fill="none" />
+                  </defs>
+                  <text className="disc-text-curved">
+                    <textPath href="#disc-curve" startOffset="50%">
+                      <tspan textAnchor="middle">YANKEE GO HOME</tspan>
+                    </textPath>
+                  </text>
+                </svg>
+          </div>
+              <audio ref={(el) => { discAudioRefs.current[0] = el; }} preload="metadata">
+                <source src={require('./Tracks/YANKEE GO HOME master.wav')} type="audio/wav" />
+              </audio>
+          </div>
+            <div className="disc-wrapper" onClick={() => handleDiscClick(1)}>
+              <div className={`disc-container ${playingDiscIndex === 1 ? 'spinning' : ''}`}>
+                <img 
+                  src={require('./amuse stores logos/disc.png')} 
+                  alt="Disc" 
+                  className="disc-image"
+                />
+                <svg className="disc-text-svg" viewBox="0 0 300 300">
+                  <defs>
+                    <path id="disc-curve-2" d="M 50,150 A 100,100 0 1,1 250,150" fill="none" />
+                  </defs>
+                  <text className="disc-text-curved">
+                    <textPath href="#disc-curve-2" startOffset="50%">
+                      <tspan textAnchor="middle">PROJ 993</tspan>
+                    </textPath>
+                  </text>
+                </svg>
+          </div>
+              <audio ref={(el) => { discAudioRefs.current[1] = el; }} preload="metadata">
+                <source src={require('./Tracks/proj 993 w into.wav')} type="audio/wav" />
+              </audio>
+          </div>
+            <div className="disc-wrapper" onClick={() => handleDiscClick(2)}>
+              <div className={`disc-container ${playingDiscIndex === 2 ? 'spinning' : ''}`}>
+                <img 
+                  src={require('./amuse stores logos/disc.png')} 
+                  alt="Disc" 
+                  className="disc-image"
+                />
+                <svg className="disc-text-svg" viewBox="0 0 300 300">
+                  <defs>
+                    <path id="disc-curve-3" d="M 30,150 A 120,120 0 1,1 270,150" fill="none" />
+                  </defs>
+                  <text className="disc-text-curved disc-text-long">
+                    <textPath href="#disc-curve-3" startOffset="50%">
+                      <tspan textAnchor="middle">how it got so tough</tspan>
+                    </textPath>
+                  </text>
+                </svg>
+          </div>
+              <audio ref={(el) => { discAudioRefs.current[2] = el; }} preload="metadata">
+                <source src={require('./Tracks/how it got so tough rough demo 3.wav')} type="audio/wav" />
+              </audio>
+          </div>
+            {/* Bottom row: Tracks 4, 5, 6 */}
+            <div className="disc-wrapper" onClick={() => handleDiscClick(3)}>
+              <div className={`disc-container ${playingDiscIndex === 3 ? 'spinning' : ''}`}>
+                <img 
+                  src={require('./amuse stores logos/disc.png')} 
+                  alt="Disc" 
+                  className="disc-image"
+                />
+                <svg className="disc-text-svg" viewBox="0 0 300 300">
+                  <defs>
+                    <path id="disc-curve-4" d="M 50,150 A 100,100 0 1,1 250,150" fill="none" />
+                  </defs>
+                  <text className="disc-text-curved">
+                    <textPath href="#disc-curve-4" startOffset="50%">
+                      <tspan textAnchor="middle">the Plan</tspan>
+                    </textPath>
+                  </text>
+                </svg>
+          </div>
+              <audio ref={(el) => { discAudioRefs.current[3] = el; }} preload="metadata">
+                <source src={require('./Tracks/the plan explicit MASTER 2.wav')} type="audio/wav" />
+              </audio>
+          </div>
+            <div className="disc-wrapper" onClick={() => handleDiscClick(4)}>
+              <div className={`disc-container ${playingDiscIndex === 4 ? 'spinning' : ''}`}>
+                <img 
+                  src={require('./amuse stores logos/disc.png')} 
+                  alt="Disc" 
+                  className="disc-image"
+                />
+                <svg className="disc-text-svg" viewBox="0 0 300 300">
+                  <defs>
+                    <path id="disc-curve-5" d="M 50,150 A 100,100 0 1,1 250,150" fill="none" />
+                  </defs>
+                  <text className="disc-text-curved">
+                    <textPath href="#disc-curve-5" startOffset="50%">
+                      <tspan textAnchor="middle">WINDOWS DOWN</tspan>
+                    </textPath>
+                  </text>
+                </svg>
+          </div>
+              <audio ref={(el) => { discAudioRefs.current[4] = el; }} preload="metadata">
+                <source src={require('./Tracks/WINDOWS DOWN master 6.wav')} type="audio/wav" />
+              </audio>
+          </div>
+            <div className="disc-wrapper" onClick={() => handleDiscClick(5)}>
+              <div className={`disc-container ${playingDiscIndex === 5 ? 'spinning' : ''}`}>
+                <img 
+                  src={require('./amuse stores logos/disc.png')} 
+                  alt="Disc" 
+                  className="disc-image"
+                />
+                <svg className="disc-text-svg" viewBox="0 0 300 300">
+                  <defs>
+                    <path id="disc-curve-6" d="M 50,150 A 100,100 0 1,1 250,150" fill="none" />
+                  </defs>
+                  <text className="disc-text-curved">
+                    <textPath href="#disc-curve-6" startOffset="50%">
+                      <tspan textAnchor="middle">placeholder</tspan>
+                    </textPath>
+                  </text>
+                </svg>
+          </div>
+              <audio ref={(el) => { discAudioRefs.current[5] = el; }} preload="metadata">
+                <source src={require('./Tracks/electric guitar wet 70 bpm.wav')} type="audio/wav" />
+              </audio>
+          </div>
+        </div>
+          </div>
+      </section>
+      {/* VHS Section */}
+      <section id="videos-section" className="vhs-section">
+        <div className="vhs-video-container">
+          <video
+            ref={vhsVideoRef}
+            className="vhs-video"
+            autoPlay
+            loop={currentVHSVideo === '/videos/VHS/loading-screen-vhs-short.mp4'}
+            muted
+            playsInline
+            src={currentVHSVideo}
+          />
+          {showYouTubePlayer && (
+            <>
+              <div
+                className="vhs-youtube-overlay"
+                style={{
+                  top: `${boxPosition.top}%`,
+                  right: `${boxPosition.right}%`,
+                  width: `${boxPosition.width}%`,
+                  paddingBottom: `${boxPosition.height}%`
+                }}
+              >
+                <iframe
+                  width="100%"
+                  height="100%"
+                  src={`https://www.youtube.com/embed/${currentYouTubeVideo}?autoplay=1`}
+                  title="Music Video"
+                  frameBorder="0"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                  allowFullScreen
+                ></iframe>
+              </div>
+              <img
+                src="/videos/VHS/stop_ejects VHS png.png"
+                alt="Stop/Eject"
+                className="vhs-stop-eject-btn"
+                onClick={handleStopEject}
+                style={{
+                  top: `calc(${boxPosition.top + boxPosition.height + 1}% + 250px)`,
+                  right: `${boxPosition.right + boxPosition.width / 2 - boxPosition.width / 6}%`,
+                  width: `${boxPosition.width / 3}%`,
+                  cursor: 'pointer'
+                }}
+              />
+            </>
+          )}
+          {showPositioningBox && (
+            <div
+              className="vhs-positioning-box"
+              style={{
+                top: `${boxPosition.top}%`,
+                right: `${boxPosition.right}%`,
+                width: `${boxPosition.width}%`,
+                paddingBottom: `${boxPosition.height}%`
+              }}
+            >
+              <div className="positioning-label">YouTube Player Position</div>
+            </div>
+          )}
+        </div>
+
+        {showPositioningBox && (
+          <div className="positioning-controls">
+            <h4>Adjust YouTube Player Position:</h4>
+            <div className="control-row">
+              <label>Top: {boxPosition.top}%</label>
+              <input
+                type="range"
+                min="0"
+                max="80"
+                step="0.5"
+                value={boxPosition.top}
+                onChange={(e) => setBoxPosition({ ...boxPosition, top: parseFloat(e.target.value) })}
+              />
+            </div>
+            <div className="control-row">
+              <label>Right: {boxPosition.right}%</label>
+              <input
+                type="range"
+                min="0"
+                max="80"
+                step="0.5"
+                value={boxPosition.right}
+                onChange={(e) => setBoxPosition({ ...boxPosition, right: parseFloat(e.target.value) })}
+              />
+            </div>
+            <div className="control-row">
+              <label>Width: {boxPosition.width}%</label>
+              <input
+                type="range"
+                min="5"
+                max="50"
+                step="0.5"
+                value={boxPosition.width}
+                onChange={(e) => setBoxPosition({ ...boxPosition, width: parseFloat(e.target.value) })}
+              />
+            </div>
+            <div className="control-row">
+              <label>Height: {boxPosition.height}%</label>
+              <input
+                type="range"
+                min="5"
+                max="50"
+                step="0.5"
+                value={boxPosition.height}
+                onChange={(e) => setBoxPosition({ ...boxPosition, height: parseFloat(e.target.value) })}
+              />
+            </div>
+            <button className="hide-positioning-btn" onClick={() => setShowPositioningBox(false)}>
+              Hide Positioning Box (Click ACID LOVE to show again)
+            </button>
+            <div className="positioning-values">
+              Current values: top: {boxPosition.top}%, right: {boxPosition.right}%, width: {boxPosition.width}%, height: {boxPosition.height}%
+            </div>
+          </div>
+        )}
+
+        <div className="vhs-images-container">
+          <img
+            src="/videos/VHS/ACID LOVE OFFICIAL VIDEO PNG.png"
+            alt="Acid Love Official Video"
+            className="vhs-image vhs-image-clickable"
+            onClick={() => switchVideoSmooth('/videos/VHS/ACID LOVE INTRO VHS.mp4')}
+            style={{ cursor: 'pointer' }}
+          />
+          <img
+            src="/videos/VHS/ALL THE TIME OFFICIAL VIDEO PNG.png"
+            alt="All The Time Official Video"
+            className="vhs-image vhs-image-clickable"
+            onClick={() => switchVideoSmooth('/videos/VHS/ALL THE TIME INTRO VHS.mp4')}
+            style={{ cursor: 'pointer' }}
+          />
+        </div>
+      </section>
+
+
+
+
+
+
+
+      {/* Projector Section */}
+      <section
+        className="projector-section"
+        onMouseMove={(e) => {
+          const side = e.clientX < window.innerWidth / 2 ? 'left' : 'right';
+          setProjectorOverlaySide(side);
+        }}
+        onMouseLeave={() => setProjectorOverlaySide(null)}
+      >
+        <video
+          className="projector-video"
+          src="/videos/main-loop.mp4"
+          autoPlay
+          loop
+          muted
+          playsInline
+          preload="auto"
         />
-      </div>
-      
-      {/* Disclaimer */}
-      <div className="disclaimer">
-        All contents of this website were photographed, recorded, stylized, edited, coded, structured, and produced by Brooks Barry, unless otherwise stated
-      </div>
-      
-      {/* Header Section */}
-      <header id="hero-section" className="hero-section">
-        {/* Floating Music Platform Logos Background */}
-        <div className="floating-logos">
-          <div className="logo-item logo-1">
-            <img src={require('./amuse stores logos/Spotify_logo_without_text.svg.png')} alt="Spotify" />
+
+        {/* Video Projects title overlay */}
+        {/* Title overlays that alternate every 3s */}
+        <img
+          className={"projector-title-overlay" + (titleIndex === 0 ? "" : " hidden")}
+          src="/images/video-projects.png"
+          alt="Video Projects Title"
+        />
+        <img
+          className={"projector-title-overlay" + (titleIndex === 1 ? "" : " hidden")}
+          src="/images/video-projects-2.png"
+          alt="Video Projects Title 2"
+        />
+
+        <video
+          className={"projector-overlay-video projector-overlay-video--left" + (projectorOverlaySide === 'left' ? ' projector-overlay-video--active' : '')}
+          src="/videos/alpha-left.mp4"
+          autoPlay
+          loop
+          muted
+          playsInline
+          preload="auto"
+          onClick={() => {
+            if (projectorOverlaySide === 'left') {
+              setShowProjectorYouTube(true);
+            }
+          }}
+          style={{ cursor: projectorOverlaySide === 'left' ? 'pointer' : 'default' }}
+        />
+
+        <video
+          className={"projector-overlay-video projector-overlay-video--right" + (projectorOverlaySide === 'right' ? ' projector-overlay-video--active' : '')}
+          src="/videos/alpha-right.mp4"
+          autoPlay
+          loop
+          muted
+          playsInline
+          preload="auto"
+          onClick={() => {
+            if (projectorOverlaySide === 'right') {
+              setShowProjectorYouTubeRight(true);
+            }
+          }}
+          style={{ cursor: projectorOverlaySide === 'right' ? 'pointer' : 'default' }}
+        />
+
+        <img
+          className={"projector-poster-image projector-poster-image--right" + (projectorOverlaySide === 'left' ? ' projector-poster-image--active' : '')}
+          src="/images/TIC TAC TOE movie poster 2.png"
+          alt="TIC TAC TOE movie poster"
+        />
+
+        <img
+          className={"projector-poster-image projector-poster-image--left" + (projectorOverlaySide === 'right' ? ' projector-poster-image--active' : '')}
+          src="/images/super seniors directors note 2.png"
+          alt="Super Seniors directors note"
+        />
+
+        {showProjectorYouTube && (
+          <>
+            <div className="projector-youtube-overlay">
+              <iframe
+                width="100%"
+                height="100%"
+                src={`https://www.youtube.com/embed/${projectorYouTubeVideo}?autoplay=1`}
+                title="YouTube Video"
+                frameBorder="0"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                allowFullScreen
+              />
+            </div>
+            <button
+              className="projector-youtube-close-btn"
+              onClick={() => setShowProjectorYouTube(false)}
+            >
+              ×
+            </button>
+          </>
+        )}
+
+        {showProjectorYouTubeRight && (
+          <>
+            <div className="projector-youtube-overlay">
+              <iframe
+                width="100%"
+                height="100%"
+                src={`https://www.youtube.com/embed/${projectorYouTubeVideoRight}?autoplay=1`}
+                title="YouTube Video"
+                frameBorder="0"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                allowFullScreen
+              />
+            </div>
+            <button
+              className="projector-youtube-close-btn"
+              onClick={() => setShowProjectorYouTubeRight(false)}
+            >
+              ×
+            </button>
+          </>
+        )}
+      </section>
+
+      {/* Eyes Section (copy) - directly above Contact */}
+      <section className="eyes-section">
+        <img
+          src={require(`./eyes/${eyeImages[currentEyeIndex]}`)}
+          alt="Eye tracking mouse movement"
+          className="eye-image"
+        />
+      </section>
+
+      {/* Contact Section */}
+      <section className="contact-section">
+        <div className="contact-galaxy-background">
+        </div>
+        <div className="contact-container">
+          <div className="contact-title">
+            <FuzzyText fontSize="clamp(2.8rem, 7vw, 5rem)" fontWeight={900} color="#E9F2F2" enableHover={true}>
+              LET'S WORK!
+            </FuzzyText>
           </div>
-          <div className="logo-item logo-2">
-            <img src={require('./amuse stores logos/Apple_Music_icon.svg.png')} alt="Apple Music" />
-          </div>
-          <div className="logo-item logo-3">
-            <img src={require('./amuse stores logos/YT_Music.svg.png')} alt="YouTube Music" />
-          </div>
-          <div className="logo-item logo-4">
-            <img src={require('./amuse stores logos/Instagram_icon.png')} alt="Instagram" />
-          </div>
-          <div className="logo-item logo-5">
-            <img src={require('./amuse stores logos/Beatport-Black.png')} alt="Beatport" />
-          </div>
-          <div className="logo-item logo-6">
-            <img src={require('./amuse stores logos/Boomplay_Music_Logo.png')} alt="Boomplay" />
-          </div>
-          <div className="logo-item logo-7">
-            <img src={require('./amuse stores logos/Amazonmusic.logo.png')} alt="Amazon Music" />
-          </div>
-          <div className="logo-item logo-8">
-            <img src={require('./amuse stores logos/Deezer_logo,_2023.svg.png')} alt="Deezer" />
-          </div>
-          <div className="logo-item logo-9">
-            <img src={require('./amuse stores logos/iHeartRadio-Logo.png')} alt="iHeartRadio" />
-          </div>
-          <div className="logo-item logo-10">
-            <img src={require('./amuse stores logos/Pandora-Logo.png')} alt="Pandora" />
-          </div>
-          <div className="logo-item logo-11">
-            <img src={require('./amuse stores logos/Shazam_icon.svg.png')} alt="Shazam" />
-          </div>
-          <div className="logo-item logo-12">
-            <img src={require('./amuse stores logos/Anghami_logo.png')} alt="Anghami" />
-          </div>
+
+          <form
+            className="contact-form"
+            onSubmit={(e) => {
+              e.preventDefault();
+            }}
+          >
+            <div className="form-row">
+              <label>Name</label>
+              <input type="text" name="name" required />
+            </div>
+            <div className="form-row">
+              <label>Email</label>
+              <input type="email" name="email" required />
+            </div>
+            <div className="form-row">
+              <label>Message</label>
+              <textarea name="message" rows={6} required />
+            </div>
+            <button type="submit">Send</button>
+          </form>
+        </div>
+      </section>
+
+      {/* Scoring Section */}
+      <section 
+        className="scoring-section"
+        onMouseEnter={startCurtainAnimation}
+        onMouseLeave={stopCurtainAnimation}
+      >
+        {/* Curtains Overlay */}
+        <div className="scoring-curtains-overlay">
+          <img 
+            src={`/overlays/curtains scene ${currentCurtainScene}.png`}
+            alt="Theatrical curtains overlay" 
+            className="curtains-image"
+          />
         </div>
         
-        <div className="profile-container">
-          <div className="profile-photo">
-            <img src={require('./IMG_9674.jpg')} alt="Brooks Barry" className="profile-image" />
+        {/* Scores Overlay */}
+        <div className="scoring-scores-overlay">
+          <img 
+            src={`/overlays/scores scene ${currentScoresScene}.png`}
+            alt="Musical scores overlay" 
+            className="scores-image"
+          />
+        </div>
+        
+        {/* Film Sign Overlay */}
+        <div className="scoring-film-sign-overlay" onClick={handleFilmSignClick}>
+          <img 
+            src="/overlays/film sign.png"
+            alt="Film Sign"
+            className="film-sign-image"
+          />
           </div>
-          <h1 className="name">Brooks Barry</h1>
-          
-          <div className="social-links">
-            <a href="#" className="social-link instagram" aria-label="Instagram">
-              <img src={require('./amuse stores logos/Instagram_icon.png')} alt="Instagram" className="social-icon-img" />
-            </a>
-            
-            <a href="#" className="social-link tiktok" aria-label="TikTok">
-              <img src="/tiktok-icon.svg" alt="TikTok" className="social-icon-img" />
-            </a>
-            
-            <a href="#" className="social-link spotify" aria-label="Spotify">
-              <img src={require('./amuse stores logos/Spotify_logo_without_text.svg.png')} alt="Spotify" className="social-icon-img" />
-            </a>
-            
-            <a href="#" className="social-link apple-music" aria-label="Apple Music">
-              <img src={require('./amuse stores logos/Apple_Music_icon.svg.png')} alt="Apple Music" className="social-icon-img" />
-            </a>
+      </section>
+
+      {/* Drum Looper Section */}
+      <section className="drum-looper-section">
+        <div className="container">
+            <h1 className={`challenge-title ${textPulse.kick ? 'pulse-kick' : ''}`}>VERSATILITY TEST</h1>
+            <h2 className={`challenge-subtitle ${textPulse.snare ? 'pulse-snare' : ''}`}>I can rap on any beat in the world</h2>
+            <p className={`challenge-instructions ${textPulse.hihat ? 'pulse-hihat' : ''}`}>Make your own drum loop, and I'll rap over it</p>
+
+          {/* BPM Control */}
+          <div className="bpm-control">
+            <label htmlFor="bpm-slider">BPM: {currentBPM}</label>
+            <input
+              type="range"
+              id="bpm-slider"
+              min="60"
+              max="180"
+              value={currentBPM}
+              onChange={(e) => setCurrentBPM(Number(e.target.value))}
+              className="bpm-slider"
+            />
           </div>
-          
-          <h2 className="title">Artist • Lyricist • Vocalist • Producer<br />Mixing Engineer • Mastering Engineer<br />Video Producer</h2>
-          
-          <div className="contact-info">
-            <a href="mailto:brooksmusicbarry@gmail.com" className="email-link">
-              brooksmusicbarry@gmail.com
-            </a>
+
+          {/* Play/Pause Button */}
+          <div className="play-controls">
+            <button 
+              className={`play-btn ${isDrumLooperPlaying ? 'playing' : ''}`}
+              onClick={() => setIsDrumLooperPlaying(!isDrumLooperPlaying)}
+            >
+              {isDrumLooperPlaying ? '⏸ PAUSE' : '▶ PLAY'}
+            </button>
+          </div>
+
+          {/* Drum Grid */}
+          <div className="drum-grid">
+            {/* Beat Lines - Vertical dotted lines every 8 steps (every 2 bars) */}
+            <div className="beat-lines">
+              <div className="beat-line beat-line-1"></div>
+              <div className="beat-line beat-line-2"></div>
+              <div className="beat-line beat-line-3"></div>
+        </div>
+            
+            {/* Step Numbers */}
+            <div className="step-numbers">
+              <div className="step-spacer"></div>
+              <div className="step-spacer"></div>
+              {[...Array(16)].map((_, i) => (
+                <div key={i} className="step-number">{i + 1}</div>
+              ))}
+            </div>
+
+            {/* Kick Row */}
+            <div className="drum-row">
+              <button className="refresh-btn" data-drum="kick" title="New kick sound">
+                <svg className="refresh-icon" viewBox="0 0 24 24" fill="none">
+                  <path d="M4 12a8 8 0 0 1 8-8V2.5L14.5 5 12 7.5V6a6 6 0 1 0-6 6H4z" fill="currentColor"/>
+                  <path d="M20 12a8 8 0 0 1-8 8v1.5L9.5 19 12 16.5V18a6 6 0 1 0 6-6h2z" fill="currentColor"/>
+                </svg>
+              </button>
+              <div className="drum-label">Kick</div>
+              {[...Array(16)].map((_, i) => (
+                <button 
+                  key={`kick-${i}`} 
+                  className={`step-button ${drumPattern.kick[i] ? 'active' : ''} ${currentStep === i ? 'current' : ''}`}
+                  data-drum="kick" 
+                  data-step={i}
+                >
+                </button>
+              ))}
+            </div>
+
+            {/* Snare Row */}
+            <div className="drum-row">
+              <button className="refresh-btn" data-drum="snare" title="New snare sound">
+                <svg className="refresh-icon" viewBox="0 0 24 24" fill="none">
+                  <path d="M4 12a8 8 0 0 1 8-8V2.5L14.5 5 12 7.5V6a6 6 0 1 0-6 6H4z" fill="currentColor"/>
+                  <path d="M20 12a8 8 0 0 1-8 8v1.5L9.5 19 12 16.5V18a6 6 0 1 0 6-6h2z" fill="currentColor"/>
+                </svg>
+              </button>
+              <div className="drum-label">Snare</div>
+              {[...Array(16)].map((_, i) => (
+                <button 
+                  key={`snare-${i}`} 
+                  className={`step-button ${drumPattern.snare[i] ? 'active' : ''} ${currentStep === i ? 'current' : ''}`}
+                  data-drum="snare" 
+                  data-step={i}
+                >
+                </button>
+              ))}
+            </div>
+
+            {/* Hi-Hat Row */}
+            <div className="drum-row">
+              <button className="refresh-btn" data-drum="hihat" title="New hi-hat sound">
+                <svg className="refresh-icon" viewBox="0 0 24 24" fill="none">
+                  <path d="M4 12a8 8 0 0 1 8-8V2.5L14.5 5 12 7.5V6a6 6 0 1 0-6 6H4z" fill="currentColor"/>
+                  <path d="M20 12a8 8 0 0 1-8 8v1.5L9.5 19 12 16.5V18a6 6 0 1 0 6-6h2z" fill="currentColor"/>
+                </svg>
+              </button>
+              <div className="drum-label">Hi-Hat</div>
+              {[...Array(16)].map((_, i) => (
+                <button 
+                  key={`hihat-${i}`} 
+                  className={`step-button ${drumPattern.hihat[i] ? 'active' : ''} ${currentStep === i ? 'current' : ''}`}
+                  data-drum="hihat" 
+                  data-step={i}
+                >
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Current Step Indicator */}
+          <div className="current-step-indicator">
+            <div className="step-indicator-track">
+              {[...Array(16)].map((_, i) => (
+                <div key={i} className={`step-indicator ${currentStep === i ? 'current' : ''}`} data-step={i}></div>
+              ))}
+            </div>
+          </div>
+
+          {/* Light Show Button */}
+          <div className="light-show-controls">
+            <button 
+              id="light-btn" 
+              className={`light-btn ${laserShow ? 'active' : ''}`}
+              onClick={() => setLaserShow(!laserShow)}
+            >
+              {laserShow ? '⚡ STOP LIGHT SHOW' : '💡 START LIGHT SHOW'}
+            </button>
+          </div>
+
+          {/* Professional Light Show */}
+          {laserShow && (
+            <div className="concert-lights" style={{'--bpm': currentBPM} as React.CSSProperties}>
+              {/* Main Stage Wash Lights */}
+              <div className="stage-wash wash-left"></div>
+              <div className="stage-wash wash-center"></div>
+              <div className="stage-wash wash-right"></div>
+              
+              {/* Moving Head Spotlights */}
+              <div className="moving-head head-1"></div>
+              <div className="moving-head head-2"></div>
+              <div className="moving-head head-3"></div>
+              <div className="moving-head head-4"></div>
+              
+              {/* LED Strip Chases */}
+              <div className="led-strip strip-top"></div>
+              <div className="led-strip strip-bottom"></div>
+              <div className="led-strip strip-left"></div>
+              <div className="led-strip strip-right"></div>
+              
+              {/* Rhythmic Pulse Lights */}
+              <div className="pulse-light pulse-1"></div>
+              <div className="pulse-light pulse-2"></div>
+              <div className="pulse-light pulse-3"></div>
+              <div className="pulse-light pulse-4"></div>
+              
+              {/* Color Chase Beams */}
+              <div className="chase-beam beam-1"></div>
+              <div className="chase-beam beam-2"></div>
+              <div className="chase-beam beam-3"></div>
+              <div className="chase-beam beam-4"></div>
+              <div className="chase-beam beam-5"></div>
+              <div className="chase-beam beam-6"></div>
+              
+              {/* Atmospheric Haze Effect */}
+              <div className="haze-layer"></div>
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* DAWs Section */}
+      <section id="daws-section" className="daws-section">
+        <div className="container">
+          <h3>DAWs/Software</h3>
+          <div className="daws-scroll-container">
+          <div className="daws-grid">
+              {/* First set */}
+              <div className="daw-item">
+                <img
+                  src={require('./amuse stores logos/fl studio logo.png')}
+                  alt="FL Studio"
+                  style={{
+                    width: '150px',
+                    height: '150px',
+                    objectFit: 'contain',
+                  }}
+                />
+                <h4 className="daw-name">FL Studio</h4>
+              </div>
+              
+              <div className="daw-item">
+                <img
+                  src={require('./amuse stores logos/Logic_Pro_icon.png')}
+                  alt="Logic Pro"
+                  style={{
+                    width: '150px',
+                    height: '150px',
+                    objectFit: 'contain',
+                  }}
+                />
+                <h4 className="daw-name">Logic Pro</h4>
+              </div>
+              
+            <div className="daw-item">
+              <div className="daw-logo-placeholder">
+                <div className="logo-content">
+                    <div className="logo-icon">🎚️</div>
+                    <p>DAW Logo 3</p>
+                </div>
+              </div>
+                <h4 className="daw-name">Adobe Audition</h4>
+            </div>
+            
+            <div className="daw-item">
+              <div className="daw-logo-placeholder">
+                <div className="logo-content">
+                    <div className="logo-icon">🎨</div>
+                    <p>Software Logo 1</p>
+                </div>
+              </div>
+                <h4 className="daw-name">Adobe Photoshop</h4>
+              </div>
+
+              <div className="daw-item">
+                <img
+                  src={require('./amuse stores logos/Adobe_Premiere_Pro_CC_icon.svg.png')}
+                  alt="Adobe Premiere Pro"
+                  style={{
+                    width: '150px',
+                    height: '150px',
+                    objectFit: 'contain',
+                  }}
+                />
+                <h4 className="daw-name">Adobe Premiere Pro</h4>
+          </div>
+              
+              <div className="daw-item">
+                <img
+                  src={require('./amuse stores logos/final-cut-pro-logo-hd.png')}
+                  alt="Final Cut Pro"
+              style={{
+                    width: '150px',
+                    height: '150px',
+                    objectFit: 'contain',
+                  }}
+                />
+                <h4 className="daw-name">Final Cut Pro</h4>
+              </div>
+
+              <div className="daw-item">
+                <img
+                  src={require('./amuse stores logos/cursor-logo-icon-freelogovectors.net_.png')}
+                  alt="Cursor"
+            style={{
+                    width: '150px',
+                    height: '150px',
+                    objectFit: 'contain',
+                  }}
+                />
+                <h4 className="daw-name">Cursor</h4>
+              </div>
+
+              {/* Duplicate set for infinite scroll */}
+              <div className="daw-item">
+                <img
+                  src={require('./amuse stores logos/fl studio logo.png')}
+                  alt="FL Studio"
+              style={{
+                    width: '150px',
+                    height: '150px',
+                objectFit: 'contain',
+              }}
+            />
+                <h4 className="daw-name">FL Studio</h4>
+          </div>
+              
+              <div className="daw-item">
+                <img
+                  src={require('./amuse stores logos/Logic_Pro_icon.png')}
+                  alt="Logic Pro"
+            style={{
+                    width: '150px',
+                    height: '150px',
+                    objectFit: 'contain',
+                  }}
+                />
+                <h4 className="daw-name">Logic Pro</h4>
+              </div>
+              
+            <div className="daw-item">
+              <div className="daw-logo-placeholder">
+                <div className="logo-content">
+                  <div className="logo-icon">🎚️</div>
+                  <p>DAW Logo 3</p>
+                </div>
+              </div>
+              <h4 className="daw-name">Adobe Audition</h4>
+            </div>
+
+              <div className="daw-item">
+                <img
+                  src={require('./amuse stores logos/Adobe_Photoshop_CC_icon.svg.png')}
+                  alt="Adobe Photoshop"
+              style={{
+                    width: '150px',
+                    height: '150px',
+                objectFit: 'contain',
+              }}
+            />
+                <h4 className="daw-name">Adobe Photoshop</h4>
+          </div>
+
+              <div className="daw-item">
+                <img
+                  src={require('./amuse stores logos/Adobe_Premiere_Pro_CC_icon.svg.png')}
+                  alt="Adobe Premiere Pro"
+            style={{
+                    width: '150px',
+                    height: '150px',
+                    objectFit: 'contain',
+                  }}
+                />
+                <h4 className="daw-name">Adobe Premiere Pro</h4>
+              </div>
+
+              <div className="daw-item">
+                <img
+                  src={require('./amuse stores logos/final-cut-pro-logo-hd.png')}
+                  alt="Final Cut Pro"
+                  style={{
+                    width: '150px',
+                    height: '150px',
+                    objectFit: 'contain',
+                  }}
+                />
+                <h4 className="daw-name">Final Cut Pro</h4>
+              </div>
+
+              <div className="daw-item">
+                <img
+                  src={require('./amuse stores logos/cursor-logo-icon-freelogovectors.net_.png')}
+                  alt="Cursor"
+                  style={{
+                    width: '150px',
+                    height: '150px',
+                    objectFit: 'contain',
+                  }}
+                />
+                <h4 className="daw-name">Cursor</h4>
+              </div>
+            </div>
           </div>
         </div>
-      </header>
+      </section>
 
       {/* About Section */}
       <section className="about-section">
@@ -1063,14 +2114,13 @@ function App() {
         </div>
       </section>
 
-
       {/* Portfolio Section */}
       <section id="tracks-section" className="portfolio-section">
         <div className="container">
           <h3>Tracks</h3>
           
           {/* Guitar Credit */}
-          <div className="guitar-credit" style={{ top: '4205px' }}>credit: purepng.com</div>
+          
           
           {/* Guitar Sticker */}
           <div className="guitar-sticker-container" style={{ top: 'calc(50% + 3500px)' }}>
@@ -1087,7 +2137,7 @@ function App() {
               style={{
                 position: 'absolute',
                 left: 101,
-                top: 686, // Moved up 450px
+                top: 686,
                 width: Math.sqrt(Math.pow(56 - 101, 2) + Math.pow(4612 - 1636, 2)),
                 height: '8px',
                 backgroundColor: 'transparent',
@@ -1106,7 +2156,7 @@ function App() {
             style={{
               position: 'absolute',
               right: '-470px',
-              top: 'calc(50% + 1650px)', // Moved up 450px
+              top: 'calc(50% + 1650px)',
               transform: 'translateY(-50%)',
               height: '1400px',
               width: 'auto',
@@ -1114,7 +2164,7 @@ function App() {
               cursor: 'pointer',
               transition: fadingInGuitarString === 1 ? 'opacity 0.1s ease-in' : 'opacity 4s ease-out',
               opacity: fadingGuitarString === 1 ? 0 : fadingInGuitarString === 1 ? 0 : 1,
-              pointerEvents: 'none', // Prevent overlay from intercepting clicks
+              pointerEvents: 'none',
             }}
           >
             <img
@@ -1137,7 +2187,7 @@ function App() {
             style={{
               position: 'absolute',
               right: '-470px',
-              top: 'calc(50% + 1650px)', // Moved up 450px
+              top: 'calc(50% + 1650px)',
               transform: 'translateY(-50%)',
               height: '1400px',
               width: 'auto',
@@ -1145,7 +2195,7 @@ function App() {
               cursor: 'pointer',
               transition: fadingInGuitarString === 2 ? 'opacity 0.1s ease-in' : 'opacity 4s ease-out',
               opacity: fadingGuitarString === 2 ? 0 : fadingInGuitarString === 2 ? 0 : 1,
-              pointerEvents: 'none', // Prevent overlay from intercepting clicks
+              pointerEvents: 'none',
             }}
           >
             <img
@@ -1168,7 +2218,7 @@ function App() {
             style={{
               position: 'absolute',
               right: '-470px',
-              top: 'calc(50% + 1650px)', // Moved up 450px
+              top: 'calc(50% + 1650px)',
               transform: 'translateY(-50%)',
               height: '1400px',
               width: 'auto',
@@ -1176,7 +2226,7 @@ function App() {
               cursor: 'pointer',
               transition: fadingInGuitarString === 3 ? 'opacity 0.1s ease-in' : 'opacity 4s ease-out',
               opacity: fadingGuitarString === 3 ? 0 : fadingInGuitarString === 3 ? 0 : 1,
-              pointerEvents: 'none', // Prevent overlay from intercepting clicks
+              pointerEvents: 'none',
             }}
           >
             <img
@@ -1199,7 +2249,7 @@ function App() {
             style={{
               position: 'absolute',
               right: '-470px',
-              top: 'calc(50% + 1650px)', // Moved up 450px
+              top: 'calc(50% + 1650px)',
               transform: 'translateY(-50%)',
               height: '1400px',
               width: 'auto',
@@ -1207,7 +2257,7 @@ function App() {
               cursor: 'pointer',
               transition: fadingInGuitarString === 4 ? 'opacity 0.1s ease-in' : 'opacity 4s ease-out',
               opacity: fadingGuitarString === 4 ? 0 : fadingInGuitarString === 4 ? 0 : 1,
-              pointerEvents: 'none', // Prevent overlay from intercepting clicks
+              pointerEvents: 'none',
             }}
           >
             <img
@@ -1230,7 +2280,7 @@ function App() {
             style={{
               position: 'absolute',
               right: '-470px',
-              top: 'calc(50% + 1650px)', // Moved up 450px
+              top: 'calc(50% + 1650px)',
               transform: 'translateY(-50%)',
               height: '1400px',
               width: 'auto',
@@ -1238,7 +2288,7 @@ function App() {
               cursor: 'pointer',
               transition: fadingInGuitarString === 5 ? 'opacity 0.1s ease-in' : 'opacity 4s ease-out',
               opacity: fadingGuitarString === 5 ? 0 : fadingInGuitarString === 5 ? 0 : 1,
-              pointerEvents: 'none', // Prevent overlay from intercepting clicks
+              pointerEvents: 'none',
             }}
           >
             <img
@@ -1261,7 +2311,7 @@ function App() {
             style={{
               position: 'absolute',
               right: '-470px',
-              top: 'calc(50% + 1650px)', // Moved up 450px
+              top: 'calc(50% + 1650px)',
               transform: 'translateY(-50%)',
               height: '1400px',
               width: 'auto',
@@ -1269,7 +2319,7 @@ function App() {
               cursor: 'pointer',
               transition: fadingInGuitarString === 6 ? 'opacity 0.1s ease-in' : 'opacity 4s ease-out',
               opacity: fadingGuitarString === 6 ? 0 : fadingInGuitarString === 6 ? 0 : 1,
-              pointerEvents: 'none', // Prevent overlay from intercepting clicks
+              pointerEvents: 'none',
             }}
           >
             <img
@@ -1291,7 +2341,7 @@ function App() {
               style={{
                 position: 'absolute',
                 left: 129,
-                top: 584, // Moved up 450px
+                top: 584,
                 width: Math.sqrt(Math.pow(99 - 129, 2) + Math.pow(4612 - 1534, 2)),
                 height: '8px',
                 backgroundColor: 'transparent',
@@ -1301,23 +2351,7 @@ function App() {
                 cursor: 'pointer',
               }}
               onClick={() => handleGuitarStringClick(2)}
-            >
-              <div style={{
-                position: 'absolute',
-                top: '-20px',
-                left: '50%',
-                transform: 'translateX(-50%)',
-                color: 'white',
-                fontSize: '12px',
-                fontWeight: 'bold',
-                backgroundColor: 'rgba(0, 0, 0, 0.7)',
-                padding: '2px 6px',
-                borderRadius: '3px',
-                whiteSpace: 'nowrap',
-              }}>
-                String 2
-              </div>
-            </div>
+            ></div>
 
             {/* Clickable String 3 - Fixed Position */}
             <div
@@ -1325,7 +2359,7 @@ function App() {
               style={{
                 position: 'absolute',
                 left: 160,
-                top: 493, // Moved up 450px
+                top: 493,
                 width: Math.sqrt(Math.pow(145 - 160, 2) + Math.pow(4604 - 1443, 2)),
                 height: '8px',
                 backgroundColor: 'transparent',
@@ -1335,23 +2369,7 @@ function App() {
                 cursor: 'pointer',
               }}
               onClick={() => handleGuitarStringClick(3)}
-            >
-              <div style={{
-                position: 'absolute',
-                top: '-20px',
-                left: '50%',
-                transform: 'translateX(-50%)',
-                color: 'white',
-                fontSize: '12px',
-                fontWeight: 'bold',
-                backgroundColor: 'rgba(0, 0, 0, 0.7)',
-                padding: '2px 6px',
-                borderRadius: '3px',
-                whiteSpace: 'nowrap',
-              }}>
-                String 3
-              </div>
-            </div>
+            ></div>
 
             {/* Clickable String 4 - Fixed Position */}
             <div
@@ -1359,7 +2377,7 @@ function App() {
               style={{
                 position: 'absolute',
                 left: 191,
-                top: 392, // Moved up 450px
+                top: 392,
                 width: Math.sqrt(Math.pow(188 - 191, 2) + Math.pow(4597 - 1342, 2)),
                 height: '8px',
                 backgroundColor: 'transparent',
@@ -1369,23 +2387,7 @@ function App() {
                 cursor: 'pointer',
               }}
               onClick={() => handleGuitarStringClick(4)}
-            >
-              <div style={{
-                position: 'absolute',
-                top: '-20px',
-                left: '50%',
-                transform: 'translateX(-50%)',
-                color: 'white',
-                fontSize: '12px',
-                fontWeight: 'bold',
-                backgroundColor: 'rgba(0, 0, 0, 0.7)',
-                padding: '2px 6px',
-                borderRadius: '3px',
-                whiteSpace: 'nowrap',
-              }}>
-                String 4
-              </div>
-            </div>
+            ></div>
 
             {/* Clickable String 5 - Fixed Position */}
             <div
@@ -1393,7 +2395,7 @@ function App() {
               style={{
                 position: 'absolute',
                 left: 220,
-                top: 296, // Moved up 450px
+                top: 296,
                 width: Math.sqrt(Math.pow(236 - 220, 2) + Math.pow(4593 - 1246, 2)),
                 height: '8px',
                 backgroundColor: 'transparent',
@@ -1403,23 +2405,7 @@ function App() {
                 cursor: 'pointer',
               }}
               onClick={() => handleGuitarStringClick(5)}
-            >
-              <div style={{
-                position: 'absolute',
-                top: '-20px',
-                left: '50%',
-                transform: 'translateX(-50%)',
-                color: 'white',
-                fontSize: '12px',
-                fontWeight: 'bold',
-                backgroundColor: 'rgba(0, 0, 0, 0.7)',
-                padding: '2px 6px',
-                borderRadius: '3px',
-                whiteSpace: 'nowrap',
-              }}>
-                String 5
-              </div>
-            </div>
+            ></div>
 
             {/* Clickable String 6 - Fixed Position */}
             <div
@@ -1427,7 +2413,7 @@ function App() {
               style={{
                 position: 'absolute',
                 left: 253,
-                top: 196, // Moved up 450px
+                top: 196,
                 width: Math.sqrt(Math.pow(279 - 253, 2) + Math.pow(4591 - 1146, 2)),
                 height: '8px',
                 backgroundColor: 'transparent',
@@ -1437,23 +2423,7 @@ function App() {
                 cursor: 'pointer',
               }}
               onClick={() => handleGuitarStringClick(6)}
-            >
-              <div style={{
-                position: 'absolute',
-                top: '-20px',
-                left: '50%',
-                transform: 'translateX(-50%)',
-                color: 'white',
-                fontSize: '12px',
-                fontWeight: 'bold',
-                backgroundColor: 'rgba(0, 0, 0, 0.7)',
-                padding: '2px 6px',
-                borderRadius: '3px',
-                whiteSpace: 'nowrap',
-              }}>
-                String 6
-              </div>
-            </div>
+            ></div>
           
           <div className="guitar-fretboard-container">
             {/* Guitar Background */}
@@ -1465,7 +2435,6 @@ function App() {
             {isYankeeGoHomePlaying && (
               <div className="music-notes-container yankee-notes">
                 {[...Array(20)].map((_, i) => {
-                  // Fixed note assignment based on index to prevent changing
                   const notes = ['♪', '♫', '♬', '♩', '♭', '♯'];
                   const noteIndex = i % notes.length;
                   return (
@@ -1481,7 +2450,6 @@ function App() {
             {isTrack2Playing && (
               <div className="music-notes-container track2-notes">
                 {[...Array(20)].map((_, i) => {
-                  // Fixed note assignment based on index to prevent changing
                   const notes = ['♪', '♫', '♬', '♩', '♭', '♯'];
                   const noteIndex = i % notes.length;
                   return (
@@ -1497,7 +2465,6 @@ function App() {
             {isTrack3Playing && (
               <div className="music-notes-container track3-notes">
                 {[...Array(20)].map((_, i) => {
-                  // Fixed note assignment based on index to prevent changing
                   const notes = ['♪', '♫', '♬', '♩', '♭', '♯'];
                   const noteIndex = i % notes.length;
                   return (
@@ -1513,7 +2480,6 @@ function App() {
             {isTrack4Playing && (
               <div className="music-notes-container track4-notes">
                 {[...Array(20)].map((_, i) => {
-                  // Fixed note assignment based on index to prevent changing
                   const notes = ['♪', '♫', '♬', '♩', '♭', '♯'];
                   const noteIndex = i % notes.length;
                   return (
@@ -1529,7 +2495,6 @@ function App() {
             {isTrack5Playing && (
               <div className="music-notes-container track5-notes">
                 {[...Array(20)].map((_, i) => {
-                  // Fixed note assignment based on index to prevent changing
                   const notes = ['♪', '♫', '♬', '♩', '♭', '♯'];
                   const noteIndex = i % notes.length;
                   return (
@@ -1545,7 +2510,6 @@ function App() {
             {isTrack6Playing && (
               <div className="music-notes-container track6-notes">
                 {[...Array(20)].map((_, i) => {
-                  // Fixed note assignment based on index to prevent changing
                   const notes = ['♪', '♫', '♬', '♩', '♭', '♯'];
                   const noteIndex = i % notes.length;
                   return (
@@ -1569,8 +2533,8 @@ function App() {
                           {" (feat. "}
                           <a 
                             href={track.spotifyLink} 
-          target="_blank"
-          rel="noopener noreferrer"
+                            target="_blank"
+                            rel="noopener noreferrer"
                             className="featuring-link"
                           >
                             {track.featuring}
@@ -1820,9 +2784,8 @@ function App() {
           </div>
         </div>
       </section>
-
       {/* VHS Section */}
-      <section id="videos-section" className="vhs-section">
+      <section id="videos-section-2" className="vhs-section">
         <div className="vhs-video-container">
           <video
             ref={vhsVideoRef}
@@ -1956,15 +2919,6 @@ function App() {
             style={{ cursor: 'pointer' }}
           />
         </div>
-      </section>
-
-      {/* Eyes Section */}
-      <section className="eyes-section" ref={eyesSectionRef}>
-        <img 
-          src={require(`./eyes/${eyeImages[currentEyeIndex]}`)} 
-          alt="Eye tracking mouse movement" 
-          className="eye-image"
-        />
       </section>
 
       {/* Scoring Section */}
@@ -2601,6 +3555,83 @@ function App() {
         </div>
       )}
 
+      {/* Header Section */}
+      <header id="hero-section" className="hero-section">
+        {/* Floating Music Platform Logos Background */}
+        <div className="floating-logos">
+          <div className="logo-item logo-1">
+            <img src={require('./amuse stores logos/Spotify_logo_without_text.svg.png')} alt="Spotify" />
+          </div>
+          <div className="logo-item logo-2">
+            <img src={require('./amuse stores logos/Apple_Music_icon.svg.png')} alt="Apple Music" />
+          </div>
+          <div className="logo-item logo-3">
+            <img src={require('./amuse stores logos/YT_Music.svg.png')} alt="YouTube Music" />
+          </div>
+          <div className="logo-item logo-4">
+            <img src={require('./amuse stores logos/Instagram_icon.png')} alt="Instagram" />
+          </div>
+          <div className="logo-item logo-5">
+            <img src={require('./amuse stores logos/Beatport-Black.png')} alt="Beatport" />
+          </div>
+          <div className="logo-item logo-6">
+            <img src={require('./amuse stores logos/Boomplay_Music_Logo.png')} alt="Boomplay" />
+          </div>
+          <div className="logo-item logo-7">
+            <img src={require('./amuse stores logos/Amazonmusic.logo.png')} alt="Amazon Music" />
+          </div>
+          <div className="logo-item logo-8">
+            <img src={require('./amuse stores logos/Deezer_logo,_2023.svg.png')} alt="Deezer" />
+          </div>
+          <div className="logo-item logo-9">
+            <img src={require('./amuse stores logos/iHeartRadio-Logo.png')} alt="iHeartRadio" />
+          </div>
+          <div className="logo-item logo-10">
+            <img src={require('./amuse stores logos/Pandora-Logo.png')} alt="Pandora" />
+          </div>
+          <div className="logo-item logo-11">
+            <img src={require('./amuse stores logos/Shazam_icon.svg.png')} alt="Shazam" />
+          </div>
+          <div className="logo-item logo-12">
+            <img src={require('./amuse stores logos/Anghami_logo.png')} alt="Anghami" />
+          </div>
+        </div>
+        
+        <div className="profile-container">
+          <div className="profile-photo">
+            <img src={require('./IMG_9674.jpg')} alt="Brooks Barry" className="profile-image" />
+          </div>
+          <h1 className="name">Brooks Barry</h1>
+          
+          <div className="social-links">
+            <a href="https://instagram.com" className="social-link instagram" aria-label="Instagram" target="_blank" rel="noopener noreferrer">
+              <img src={require('./amuse stores logos/Instagram_icon.png')} alt="Instagram" className="social-icon-img" />
+            </a>
+            
+            <a href="https://tiktok.com" className="social-link tiktok" aria-label="TikTok" target="_blank" rel="noopener noreferrer">
+              <img src="/tiktok-icon.svg" alt="TikTok" className="social-icon-img" />
+            </a>
+            
+            <a href="https://spotify.com" className="social-link spotify" aria-label="Spotify" target="_blank" rel="noopener noreferrer">
+              <img src={require('./amuse stores logos/Spotify_logo_without_text.svg.png')} alt="Spotify" className="social-icon-img" />
+            </a>
+            
+            <a href="https://music.apple.com" className="social-link apple-music" aria-label="Apple Music" target="_blank" rel="noopener noreferrer">
+              <img src={require('./amuse stores logos/Apple_Music_icon.svg.png')} alt="Apple Music" className="social-icon-img" />
+            </a>
+          </div>
+          
+          <h2 className="title">Artist • Lyricist • Vocalist • Producer<br />Mixing Engineer • Mastering Engineer<br />Video Producer</h2>
+          
+          <div className="contact-info">
+            <a href="mailto:brooksmusicbarry@gmail.com" className="email-link">
+              brooksmusicbarry@gmail.com
+            </a>
+          </div>
+        </div>
+      </header>
+
+      </div> {/* End content-overlay */}
       
     </div>
   );
